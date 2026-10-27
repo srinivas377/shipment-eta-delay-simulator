@@ -226,20 +226,23 @@ def generate_tracking_events(
                 needed -= 1
             alloc_idx += 1
     elif current_count > target_total_events:
-        # Prune non-terminal scans deterministically
+        # Prune non-terminal scans deterministically in a single safe pass
         excess = current_count - target_total_events
-        shp_ids = sorted(raw_events_by_shp.keys(), reverse=True)
-        alloc_idx = 0
-        while excess > 0:
-            s_id = shp_ids[alloc_idx % len(shp_ids)]
+        prunable_candidates: List[Tuple[str, int]] = []
+        for s_id in sorted(raw_events_by_shp.keys(), reverse=True):
             ev_list = raw_events_by_shp[s_id]
-            # Drop non-essential intermediate scan if possible
-            for i in range(len(ev_list) - 1, -1, -1):
-                if ev_list[i]["event_type"] in ("IN_TRANSIT_SCAN", "ARRIVED"):
-                    ev_list.pop(i)
-                    excess -= 1
-                    break
-            alloc_idx += 1
+            for i, ev in enumerate(ev_list):
+                if ev["event_type"] in ("IN_TRANSIT_SCAN", "ARRIVED", "OUT_FOR_DELIVERY"):
+                    prunable_candidates.append((s_id, i))
+
+        # Select exactly 'excess' candidates
+        to_remove_by_shp: Dict[str, List[int]] = {}
+        for s_id, idx in prunable_candidates[:excess]:
+            to_remove_by_shp.setdefault(s_id, []).append(idx)
+
+        for s_id, idx_list in to_remove_by_shp.items():
+            for idx in sorted(idx_list, reverse=True):
+                raw_events_by_shp[s_id].pop(idx)
 
     # Finalize Sequence Numbers, IDs, and ShipmentStatusHistory
     all_final_events: List[Dict[str, Any]] = []
