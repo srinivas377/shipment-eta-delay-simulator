@@ -8,6 +8,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import shutil
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -294,6 +295,8 @@ def export_dataset(
     gt_sorted = sorted(ground_truth, key=lambda x: (x.get("record_type", ""), x.get("record_id", "")))
     gt_csv_path = ground_truth_dir / "ground_truth.csv"
     gt_json_path = ground_truth_dir / "ground_truth.json"
+    gt_dataset_csv_path = ground_truth_dir / f"ground_truth_{out_dir.name}.csv"
+    gt_dataset_json_path = ground_truth_dir / f"ground_truth_{out_dir.name}.json"
 
     if gt_sorted:
         gt_fields = list(gt_sorted[0].keys())
@@ -304,6 +307,10 @@ def export_dataset(
 
         with open(gt_json_path, "w", encoding="utf-8") as f:
             json.dump(gt_sorted, f, indent=2)
+
+        # Write dataset-specific copies to prevent cross-scale overwrite collisions
+        shutil.copy2(gt_csv_path, gt_dataset_csv_path)
+        shutil.copy2(gt_json_path, gt_dataset_json_path)
 
         manifest_files.append({
             "name": "ground_truth.csv",

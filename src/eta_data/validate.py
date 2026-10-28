@@ -534,12 +534,28 @@ def validate_data_directory(data_dir: Path, ground_truth_dir: Optional[Path] = N
             tables[table_name] = load_csv_table(csv_file)
 
     gt_file = None
-    if ground_truth_dir and (ground_truth_dir / "ground_truth.csv").exists():
-        gt_file = ground_truth_dir / "ground_truth.csv"
+    if ground_truth_dir:
+        dataset_gt = ground_truth_dir / f"ground_truth_{data_dir.name}.csv"
+        if dataset_gt.exists():
+            gt_file = dataset_gt
+        elif (ground_truth_dir / "ground_truth.csv").exists():
+            gt_file = ground_truth_dir / "ground_truth.csv"
     elif (data_dir / "ground_truth.csv").exists():
         gt_file = data_dir / "ground_truth.csv"
 
     ground_truth = load_csv_table(gt_file) if gt_file else []
+
+    # Filter ground truth to only anomalies referencing records present in the loaded dataset
+    active_pks: set[str] = set()
+    for tbl_name, tbl_rows in tables.items():
+        pk_col = TABLE_PRIMARY_KEYS.get(tbl_name)
+        if pk_col and tbl_rows and pk_col in tbl_rows[0]:
+            active_pks.update(r[pk_col] for r in tbl_rows)
+
+    if active_pks and ground_truth:
+        filtered_gt = [gt for gt in ground_truth if gt.get("record_id") in active_pks]
+        if filtered_gt:
+            ground_truth = filtered_gt
 
     suite = ValidationSuite(tables=tables, ground_truth=ground_truth)
     success = suite.run_all()

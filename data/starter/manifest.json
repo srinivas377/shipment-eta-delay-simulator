@@ -2,7 +2,7 @@
   "generator_version": "1.0.0",
   "master_seed": 20261022,
   "scale": 0.01,
-  "generated_at": "2026-10-28T08:31:18.022608Z",
+  "generated_at": "2026-10-28T09:51:32.680953Z",
   "generation_command": "scripts/generate.py --config config/starter.yaml --out data/starter --scale 0.01",
   "total_files": 23,
   "files": [
