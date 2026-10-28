@@ -111,8 +111,12 @@ class SimulationEngine:
             created_dt = datetime.fromisoformat(shp["created_at"].rstrip("Z"))
             orig_fac = self.facilities[shp["origin_facility_id"]]
 
-            # Pickup scheduling: respect origin opening hours
-            dispatch_prep = float(self.rng_transit.uniform(0.5, 2.5))
+            # Pickup scheduling: respect origin opening hours and supplier prep delay
+            if self.rng_transit.random() < 0.22:
+                # 22% of shipments experience supplier dispatch staging delay
+                dispatch_prep = float(self.rng_transit.uniform(3.0, 12.0))
+            else:
+                dispatch_prep = float(self.rng_transit.uniform(0.5, 2.5))
             earliest_pickup = created_dt + timedelta(hours=dispatch_prep)
             actual_pickup = get_next_open_time(orig_fac["type"], earliest_pickup)
 

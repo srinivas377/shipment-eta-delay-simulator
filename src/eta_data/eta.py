@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import math
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Tuple
-from eta_data.ids import build_eta_id
+from typing import Any, Dict, List, Set, Tuple
+from eta_data.ids import build_eta_id, format_compact_utc
 
 
 def _sigmoid(x: float) -> float:
@@ -57,8 +57,15 @@ def generate_eta_snapshots_for_shipment(
             if t_delivered is None or t_ingest < t_delivered:
                 prediction_times.append(t_ingest)
 
-    # Deduplicate and sort chronologically
-    prediction_times = sorted(list(set(prediction_times)))
+    # Deduplicate and sort chronologically by compact minute representation
+    deduped_prediction_times: List[datetime] = []
+    seen_compact: Set[str] = set()
+    for dt in sorted(prediction_times):
+        compact = format_compact_utc(dt)
+        if compact not in seen_compact:
+            seen_compact.add(compact)
+            deduped_prediction_times.append(dt)
+    prediction_times = deduped_prediction_times
 
     snapshots: List[Dict[str, Any]] = []
 
