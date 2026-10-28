@@ -1,0 +1,171 @@
+{
+  "generator_version": "1.0.0",
+  "master_seed": 20261022,
+  "scale": 0.01,
+  "generated_at": "2026-10-28T08:31:18.022608Z",
+  "generation_command": "scripts/generate.py --config config/starter.yaml --out data/starter --scale 0.01",
+  "total_files": 23,
+  "files": [
+    {
+      "name": "carriers.csv",
+      "path": "starter/carriers.csv",
+      "row_count": 6,
+      "bytes": 596,
+      "sha256": "ee5da8ec331a70bd994d534d69e2eda5d2d1befb9d6a3c5505e7804f49fbd50b"
+    },
+    {
+      "name": "facilities.csv",
+      "path": "starter/facilities.csv",
+      "row_count": 10,
+      "bytes": 629,
+      "sha256": "39050154826fbcdf59ee1fb00d93ae7582b358fa01e21f970337cf6e7715e11c"
+    },
+    {
+      "name": "service_levels.csv",
+      "path": "starter/service_levels.csv",
+      "row_count": 4,
+      "bytes": 448,
+      "sha256": "899adc043272de6a4823dcc26d1423698136c947442abbe54828f9f312bb4321"
+    },
+    {
+      "name": "routes.csv",
+      "path": "starter/routes.csv",
+      "row_count": 15,
+      "bytes": 1246,
+      "sha256": "94cd35fb6a6a3cf124713b54c06df5d0c6c83f80a2faef5569c693e1e48bb2a3"
+    },
+    {
+      "name": "route_leg_templates.csv",
+      "path": "starter/route_leg_templates.csv",
+      "row_count": 30,
+      "bytes": 1675,
+      "sha256": "2310ab0af7a7cd80083f669be8ec50e8aa747615fd14ac875c1f6e13c9a25fc0"
+    },
+    {
+      "name": "carrier_calendars.csv",
+      "path": "starter/carrier_calendars.csv",
+      "row_count": 42,
+      "bytes": 3792,
+      "sha256": "93f19547c7a14c105f4735fd61e284f0a2cbefabd5e5a944ccf62f60b4b32d83"
+    },
+    {
+      "name": "facility_calendars.csv",
+      "path": "starter/facility_calendars.csv",
+      "row_count": 70,
+      "bytes": 6257,
+      "sha256": "bd070dd7edb482262c598323002c25133b3f2b06ad8052d3bbacdf09a2a75914"
+    },
+    {
+      "name": "weather_events.csv",
+      "path": "starter/weather_events.csv",
+      "row_count": 10,
+      "bytes": 1044,
+      "sha256": "dcd9f8a9411a714885ce6ab4c3cbd2d60b95f4c22e8f905fca822eb6cf99447a"
+    },
+    {
+      "name": "weather_event_facilities.csv",
+      "path": "starter/weather_event_facilities.csv",
+      "row_count": 18,
+      "bytes": 1576,
+      "sha256": "b36d2318024b9c16872ba3e3099aa012c20f6df96307ba7948ab994471dc02a4"
+    },
+    {
+      "name": "weather_event_legs.csv",
+      "path": "starter/weather_event_legs.csv",
+      "row_count": 128,
+      "bytes": 6325,
+      "sha256": "eb41ec88dd190feb1ed4bb0fe282e9cfa7faa279c78611740216eb2b546c6fb7"
+    },
+    {
+      "name": "facility_queues.csv",
+      "path": "starter/facility_queues.csv",
+      "row_count": 300,
+      "bytes": 16354,
+      "sha256": "fae2d750f1e2ae4d8fe133390aa703f3865de384707d30ee159ff585edc03b96"
+    },
+    {
+      "name": "shipments.csv",
+      "path": "starter/shipments.csv",
+      "row_count": 500,
+      "bytes": 78133,
+      "sha256": "ea5e3e2bec387934cd5034f27198a036e5fa08342d691921c5d9e5c11e2efd98"
+    },
+    {
+      "name": "shipment_legs.csv",
+      "path": "starter/shipment_legs.csv",
+      "row_count": 987,
+      "bytes": 185531,
+      "sha256": "ea0a31659b19261d62dbcae92b576267723f6178369824d60161dee50013006b"
+    },
+    {
+      "name": "tracking_events.csv",
+      "path": "starter/tracking_events.csv",
+      "row_count": 3000,
+      "bytes": 456754,
+      "sha256": "d5ece7f1245b07d8147e7b485cdcabbb53f137e7c7491c11e93e93209ff3c35c"
+    },
+    {
+      "name": "delay_reasons.csv",
+      "path": "starter/delay_reasons.csv",
+      "row_count": 6,
+      "bytes": 624,
+      "sha256": "7bc5b20ea22a32b532760575f3ddb675ff495dc6ea6cb210f8b007a8ae40f2fb"
+    },
+    {
+      "name": "shipment_delay_reasons.csv",
+      "path": "starter/shipment_delay_reasons.csv",
+      "row_count": 329,
+      "bytes": 25062,
+      "sha256": "a7ef26683fb2022ad46a63eb690432f685309c32c651f22a473a5f5f60d8aa3b"
+    },
+    {
+      "name": "shipment_status_history.csv",
+      "path": "starter/shipment_status_history.csv",
+      "row_count": 1500,
+      "bytes": 138487,
+      "sha256": "9fc8f81d243529d5cfe243181c59058b55650b203ae0455c639b3c5e00b43324"
+    },
+    {
+      "name": "route_changes.csv",
+      "path": "starter/route_changes.csv",
+      "row_count": 23,
+      "bytes": 2371,
+      "sha256": "e517e54f4f9cbd34c7e858d1540d83eefd496deb689e645f21e4447844c00ca6"
+    },
+    {
+      "name": "eta_estimates.csv",
+      "path": "starter/eta_estimates.csv",
+      "row_count": 5013,
+      "bytes": 730413,
+      "sha256": "448cc27bcc12d092e53dac763c78e69929679b5f73eabfdc2d4f38b6f4752ff4"
+    },
+    {
+      "name": "ground_truth.csv",
+      "path": "ground_truth/ground_truth.csv",
+      "row_count": 50,
+      "bytes": 11578,
+      "sha256": "860799bf99bbf555357765dade62da1cb21c81f48a5d96d34823e714084092c5"
+    },
+    {
+      "name": "ground_truth.json",
+      "path": "ground_truth/ground_truth.json",
+      "row_count": 50,
+      "bytes": 21722,
+      "sha256": "c82b522cbaf6d4d7fe6fd68f7966883104875b00ff0a3020356c0a9b19a29678"
+    },
+    {
+      "name": "seed.sql",
+      "path": "starter/seed.sql",
+      "row_count": 11991,
+      "bytes": 3900985,
+      "sha256": "893673fbc1e93345c34c139063bbfc6a23cf8071b28531910242431202c79be6"
+    },
+    {
+      "name": "logistics.sqlite",
+      "path": "starter/logistics.sqlite",
+      "row_count": 11991,
+      "bytes": 2392064,
+      "sha256": "8e85c741541ec0a771951559436693d2f016371ed85794309c69f985aecf0020"
+    }
+  ]
+}
