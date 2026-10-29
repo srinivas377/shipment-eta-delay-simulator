@@ -46,5 +46,7 @@ Thumbs.db
 data/full/
 data/repro_1/
 data/repro_2/
+# SQLite databases (full run is gitignored, starter sqlite is tracked)
 *.sqlite
 *.db
+!data/starter/logistics.sqlite

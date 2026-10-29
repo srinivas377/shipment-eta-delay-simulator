@@ -1,9 +1,9 @@
 # YottaFlex Logistics Synthetic Dataset: Formal Validation Report
 
-**Execution Timestamp**: 2026-10-28T09:51:48.634947Z  
-**Validation Status**: PASSED (ALL SUITES GREEN)  
+**Execution Timestamp**: 2026-10-28T17:34:44.531455+00:00  
+**Validation Status**: FAILED  
 **Total Tables Verified**: 19  
-**Total Injected Anomalies Audited**: 50  
+**Total Injected Anomalies Audited**: 5727  
 
 ---
 
@@ -11,18 +11,18 @@
 
 | Suite Name | Category | Status | Violations | Labelled Anomalies Detected | Summary Details |
 |---|---|---|---|---|---|
-| Primary Key Uniqueness | RELATIONAL_INTEGRITY | PASS | 0 | 0 | Checked 11991 PKs across 19 tables. Duplicates found: 0 |
+| Primary Key Uniqueness | RELATIONAL_INTEGRITY | PASS | 0 | 0 | Checked 2141363 PKs across 19 tables. Duplicates found: 0 |
 | Foreign Key Integrity | RELATIONAL_INTEGRITY | PASS | 0 | 0 | Validated 16 FK relationships. Orphan references found: 0 |
 | ID Format Patterns | SCHEMA_CONFORMANCE | PASS | 0 | 0 | Validated zero-padded ID regex patterns. Malformed IDs: 0 |
 | Enum Domain Constraints | SCHEMA_CONFORMANCE | PASS | 0 | 0 | Validated enum domains across modes, regions, and statuses. Violations: 0 |
-| Temporal & Chronological Ordering | TEMPORAL_INTEGRITY | PASS | 0 | 24 | Unlabelled temporal order violations: 0. Labelled anomalies detected: 20 time confusion, 4 route sequence. |
+| Temporal & Chronological Ordering | TEMPORAL_INTEGRITY | PASS | 0 | 1812 | Unlabelled temporal order violations: 0. Labelled anomalies detected: 1521 time confusion, 291 route sequence. |
 | Delay Reason Arithmetic Reconciliation | MATHEMATICAL_INTEGRITY | PASS | 0 | 0 | Reconciled delay components vs total delay. Discrepancies: 0 |
-| State Machine Lifecycle Integrity | STATE_MACHINE | PASS | 0 | 3 | Validated state transitions. Unlabelled state violations: 0. Labelled anomalies detected: 3. |
+| State Machine Lifecycle Integrity | STATE_MACHINE | PASS | 0 | 227 | Validated state transitions. Unlabelled state violations: 0. Labelled anomalies detected: 227. |
 | Duplicate Tracking Event Pointers | RELATIONAL_INTEGRITY | PASS | 0 | 0 | Validated duplicate scan references. Broken duplicate pointers: 0 |
 | Delay Label Rule Consistency | BUSINESS_LOGIC | PASS | 0 | 0 | Independently recomputed SLA labels from timestamps. Mismatches: 0 |
-| ETA Prediction-Time Leakage Safety | ML_DATA_LEAKAGE | PASS | 0 | 23 | Unlabelled feature leakage violations: 0. Labelled future-peek anomalies detected: 23. |
-| Labelled Anomaly Accounting | DATA_QUALITY_AUDIT | PASS | 0 | 50 | Total injected anomalies in ground truth: 50. All 4 required anomaly classes present: True. |
-| Distribution & Sanity Bounds | DISTRIBUTION | PASS | 0 | 0 | Events/shipment: 6.0 (target 4-14). On-time rate: 86.4% (target 30-95%). |
+| ETA Prediction-Time Leakage Safety | ML_DATA_LEAKAGE | PASS | 0 | 3688 | Unlabelled feature leakage violations: 0. Labelled future-peek anomalies detected: 3688. |
+| Labelled Anomaly Accounting | DATA_QUALITY_AUDIT | PASS | 0 | 5727 | Total injected anomalies in ground truth: 5727. All 4 required anomaly classes present: True. |
+| Distribution & Sanity Bounds | DISTRIBUTION | **FAIL** | 1 | 0 | Events/shipment: 6.0 (target 5-10). On-time rate: 20.3%. Duplicate rate: 0.4% (1064 dups). Delayed: 26082 vs Severe: 13790. |
 
 ---
 
@@ -32,10 +32,10 @@ The data validator audits 100% of injected edge cases recorded in `ground_truth/
 
 | Injected Anomaly Code | Target Table | Injected Count | Detected by Validator | Precision | Recall |
 |---|---|---|---|---|---|
-| `EVENT_TIME_INGESTION_CONFUSION` | `TrackingEvent` | 20 | 20 | 100.0% | 100.0% |
-| `IMPOSSIBLE_ROUTE_ORDER` | `ShipmentLeg` | 4 | 4 | 100.0% | 100.0% |
-| `ETA_USES_FUTURE_EVENT` | `ETAEstimate` | 23 | 23 | 100.0% | 100.0% |
-| `DELIVERED_STILL_IN_TRANSIT` | `Shipment` | 3 | 3 | 100.0% | 100.0% |
+| `EVENT_TIME_INGESTION_CONFUSION` | `TrackingEvent` | 1521 | 1521 | 100.0% | 100.0% |
+| `IMPOSSIBLE_ROUTE_ORDER` | `ShipmentLeg` | 291 | 291 | 100.0% | 100.0% |
+| `ETA_USES_FUTURE_EVENT` | `ETAEstimate` | 3688 | 3688 | 100.0% | 100.0% |
+| `DELIVERED_STILL_IN_TRANSIT` | `Shipment` | 227 | 227 | 100.0% | 100.0% |
 
 ---
 

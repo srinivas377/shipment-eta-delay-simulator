@@ -12,7 +12,7 @@ import csv
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -63,6 +63,12 @@ class ValidationSuite:
             gt["record_id"]: gt for gt in self.ground_truth
         }
         self.results: List[Dict[str, Any]] = []
+        self.detected_anomalies_by_type: Dict[str, Set[str]] = {
+            "EVENT_TIME_INGESTION_CONFUSION": set(),
+            "IMPOSSIBLE_ROUTE_ORDER": set(),
+            "ETA_USES_FUTURE_EVENT": set(),
+            "DELIVERED_STILL_IN_TRANSIT": set(),
+        }
 
     def log_result(
         self,
@@ -246,6 +252,7 @@ class ValidationSuite:
             t_ev = datetime.fromisoformat(e["event_time"].rstrip("Z"))
             t_ing = datetime.fromisoformat(e["ingestion_time"].rstrip("Z"))
             if t_ev > t_ing:
+                self.detected_anomalies_by_type["EVENT_TIME_INGESTION_CONFUSION"].add(e["event_id"])
                 # Discrepancy: check if this is an injected labelled anomaly
                 gt = self.gt_anomalies_by_id.get(e["event_id"])
                 if gt and gt["issue_type"] == "EVENT_TIME_INGESTION_CONFUSION":
@@ -259,6 +266,7 @@ class ValidationSuite:
                 t_dep = datetime.fromisoformat(l["actual_depart_at"].rstrip("Z"))
                 t_arr = datetime.fromisoformat(l["actual_arrive_at"].rstrip("Z"))
                 if t_arr < t_dep:
+                    self.detected_anomalies_by_type["IMPOSSIBLE_ROUTE_ORDER"].add(l["leg_id"])
                     gt = self.gt_anomalies_by_id.get(l["leg_id"])
                     if gt and gt["issue_type"] == "IMPOSSIBLE_ROUTE_ORDER":
                         labelled_route_order += 1
@@ -321,6 +329,7 @@ class ValidationSuite:
             ev_types = events_by_shp.get(s_id, set())
 
             if "DELIVERED" in ev_types and s["current_status"] != "DELIVERED":
+                self.detected_anomalies_by_type["DELIVERED_STILL_IN_TRANSIT"].add(s_id)
                 gt = self.gt_anomalies_by_id.get(s_id)
                 if gt and gt["issue_type"] == "DELIVERED_STILL_IN_TRANSIT":
                     labelled_still_in_transit += 1
@@ -400,6 +409,7 @@ class ValidationSuite:
             t_cut = datetime.fromisoformat(eta["features_cutoff_time"].rstrip("Z"))
 
             if t_cut > t_pred:
+                self.detected_anomalies_by_type["ETA_USES_FUTURE_EVENT"].add(eta["eta_id"])
                 gt = self.gt_anomalies_by_id.get(eta["eta_id"])
                 if gt and gt["issue_type"] == "ETA_USES_FUTURE_EVENT":
                     labelled_leakage += 1
@@ -455,13 +465,27 @@ class ValidationSuite:
         on_time_count = sum(1 for s in shipments if s["final_delay_label"] == "ON_TIME")
         on_time_rate = round(on_time_count / n_shp, 3)
 
-        passed = (4.0 <= events_per_shp <= 14.0) and (0.30 <= on_time_rate <= 0.95)
+        n_dup = sum(1 for e in events if e.get("is_duplicate_of"))
+        dup_rate = round(n_dup / n_ev, 4)
+
+        delay_counts = {"ON_TIME": 0, "DELAYED": 0, "SEVERELY_DELAYED": 0}
+        for s in shipments:
+            lbl = s.get("final_delay_label", "ON_TIME")
+            if lbl in delay_counts:
+                delay_counts[lbl] += 1
+
+        passed = (
+            (5.0 <= events_per_shp <= 10.0)
+            and (0.65 <= on_time_rate <= 0.90)
+            and (n_dup > 0)
+            and (delay_counts["DELAYED"] >= delay_counts["SEVERELY_DELAYED"])
+        )
         self.log_result(
             check_name="Distribution & Sanity Bounds",
             category="DISTRIBUTION",
             passed=passed,
             violations_count=0 if passed else 1,
-            details=f"Events/shipment: {events_per_shp} (target 4-14). On-time rate: {on_time_rate*100:.1f}% (target 30-95%).",
+            details=f"Events/shipment: {events_per_shp} (target 5-10). On-time rate: {on_time_rate*100:.1f}%. Duplicate rate: {dup_rate*100:.1f}% ({n_dup} dups). Delayed: {delay_counts['DELAYED']} vs Severe: {delay_counts['SEVERELY_DELAYED']}.",
         )
 
     def generate_markdown_report(self) -> str:
@@ -469,7 +493,7 @@ class ValidationSuite:
         lines = [
             "# YottaFlex Logistics Synthetic Dataset: Formal Validation Report",
             "",
-            f"**Execution Timestamp**: {datetime.utcnow().isoformat()}Z  ",
+            f"**Execution Timestamp**: {datetime.now(timezone.utc).isoformat()}  ",
             f"**Validation Status**: {'PASSED (ALL SUITES GREEN)' if all(r['passed'] for r in self.results) else 'FAILED'}  ",
             f"**Total Tables Verified**: {len(self.tables)}  ",
             f"**Total Injected Anomalies Audited**: {len(self.ground_truth)}  ",
@@ -508,9 +532,17 @@ class ValidationSuite:
         ]
 
         for code, tbl in anomaly_codes:
-            cnt = sum(1 for gt in self.ground_truth if gt["issue_type"] == code)
+            detected_set = self.detected_anomalies_by_type.get(code, set())
+            gt_set = {gt["record_id"] for gt in self.ground_truth if gt["issue_type"] == code}
+            injected_cnt = len(gt_set)
+            detected_cnt = len(detected_set)
+            tp = len(detected_set & gt_set)
+            fp = len(detected_set - gt_set)
+            fn = len(gt_set - detected_set)
+            prec = (tp / (tp + fp) * 100.0) if (tp + fp) > 0 else (100.0 if injected_cnt == 0 else 0.0)
+            rec = (tp / (tp + fn) * 100.0) if (tp + fn) > 0 else (100.0 if injected_cnt == 0 else 0.0)
             lines.append(
-                f"| `{code}` | `{tbl}` | {cnt} | {cnt} | 100.0% | 100.0% |"
+                f"| `{code}` | `{tbl}` | {injected_cnt} | {detected_cnt} | {prec:.1f}% | {rec:.1f}% |"
             )
 
         lines.extend([

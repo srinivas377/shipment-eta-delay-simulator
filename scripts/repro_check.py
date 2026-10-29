@@ -13,7 +13,7 @@ import json
 import shutil
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 root_dir = Path(__file__).resolve().parent.parent
@@ -121,7 +121,7 @@ def run_reproducibility_check(scale: float = 0.01) -> bool:
     doc_lines = [
         "# Reproducibility Verification Report",
         "",
-        f"**Audit Timestamp**: {datetime.utcnow().isoformat()}Z  ",
+        f"**Audit Timestamp**: {datetime.now(timezone.utc).isoformat()}  ",
         f"**Master Seed**: `20261022`  ",
         f"**Scale**: `{scale}`  ",
         f"**Run 1 Execution Time**: {t_run1:.2f}s  ",

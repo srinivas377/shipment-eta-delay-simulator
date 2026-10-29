@@ -90,6 +90,14 @@ def generate_routes(
             path.extend([chosen[0], chosen[1], chosen[2], dest_fac])
 
         # Generate leg templates for this route
+        # Calibrated end-to-end planned timetable targets:
+        # 1-hop: ~20.0h (24h Express SLA -> 4.0h operational buffer)
+        # 2-hop: ~41.5h (48h Express SLA -> 6.5h operational buffer)
+        # 3-hop: ~62.5h (72h Standard SLA -> 9.5h operational buffer)
+        # 4-hop: ~105.0h (120h Freight SLA -> 15.0h operational buffer)
+        target_total = {1: 20.0, 2: 41.5, 3: 62.5, 4: 105.0}[n_legs]
+        leg_base = target_total / n_legs
+
         total_planned_hours = 0.0
         for leg_seq in range(1, len(path)):
             f_from = path[leg_seq - 1]
@@ -109,14 +117,8 @@ def generate_routes(
             candidate_carriers = carriers_by_mode.get(mode, carriers)
             carrier = rng.choice(candidate_carriers)
 
-            leg_dist = _calculate_distance(f_from, f_to, mode)
-            speed = float(carrier["base_speed_kmh"])
-            transit_hours = leg_dist / speed
-
-            # Dwell / buffer handling time at intermediate hub
-            dwell = 1.0 if leg_seq < len(path) - 1 else 0.0
-            planned_leg_hours = round(transit_hours + dwell, 2)
-            total_planned_hours += planned_leg_hours
+            p_leg = round(leg_base + float(rng.uniform(-0.4, 0.4)), 2)
+            total_planned_hours += p_leg
 
             t_row = {
                 "template_id": build_route_leg_template_id(template_seq),
@@ -125,7 +127,7 @@ def generate_routes(
                 "from_facility_id": f_from["facility_id"],
                 "to_facility_id": f_to["facility_id"],
                 "carrier_id": carrier["carrier_id"],
-                "planned_duration_hours": planned_leg_hours,
+                "planned_duration_hours": p_leg,
             }
             templates.append(t_row)
             template_seq += 1

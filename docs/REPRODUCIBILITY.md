@@ -1,10 +1,10 @@
 # Reproducibility Verification Report
 
-**Audit Timestamp**: 2026-10-28T09:52:24.494206Z  
+**Audit Timestamp**: 2026-10-28T17:23:36.560207+00:00  
 **Master Seed**: `20261022`  
 **Scale**: `0.01`  
-**Run 1 Execution Time**: 0.55s  
-**Run 2 Execution Time**: 0.58s  
+**Run 1 Execution Time**: 0.69s  
+**Run 2 Execution Time**: 0.72s  
 **Overall Status**: BIT-FOR-BIT IDENTICAL (100% REPRODUCIBLE)  
 
 ---
@@ -13,29 +13,29 @@
 
 | File Name | Run 1 Rows | Run 2 Rows | SHA-256 Checksum (Run 1) | SHA-256 Match | Verification Status |
 |---|---|---|---|---|---|
-| `carrier_calendars.csv` | 42 | 42 | `93f19547c7a14c10...` | MATCH | IDENTICAL |
-| `carriers.csv` | 6 | 6 | `ee5da8ec331a70bd...` | MATCH | IDENTICAL |
-| `delay_reasons.csv` | 6 | 6 | `7bc5b20ea22a32b5...` | MATCH | IDENTICAL |
-| `eta_estimates.csv` | 5013 | 5013 | `448cc27bcc12d092...` | MATCH | IDENTICAL |
-| `facilities.csv` | 10 | 10 | `39050154826fbcdf...` | MATCH | IDENTICAL |
-| `facility_calendars.csv` | 70 | 70 | `bd070dd7edb48226...` | MATCH | IDENTICAL |
-| `facility_queues.csv` | 300 | 300 | `fae2d750f1e2ae4d...` | MATCH | IDENTICAL |
-| `ground_truth.csv` | 50 | 50 | `860799bf99bbf555...` | MATCH | IDENTICAL |
-| `ground_truth.json` | 50 | 50 | `c82b522cbaf6d4d7...` | MATCH | IDENTICAL |
-| `logistics.sqlite` | 11991 | 11991 | `8e85c741541ec0a7...` | MATCH | IDENTICAL |
-| `route_changes.csv` | 23 | 23 | `e517e54f4f9cbd34...` | MATCH | IDENTICAL |
-| `route_leg_templates.csv` | 30 | 30 | `2310ab0af7a7cd80...` | MATCH | IDENTICAL |
-| `routes.csv` | 15 | 15 | `94cd35fb6a6a3cf1...` | MATCH | IDENTICAL |
-| `seed.sql` | 11991 | 11991 | `893673fbc1e93345...` | MATCH | IDENTICAL |
-| `service_levels.csv` | 4 | 4 | `899adc043272de6a...` | MATCH | IDENTICAL |
-| `shipment_delay_reasons.csv` | 329 | 329 | `a7ef26683fb2022a...` | MATCH | IDENTICAL |
-| `shipment_legs.csv` | 987 | 987 | `ea0a31659b19261d...` | MATCH | IDENTICAL |
-| `shipment_status_history.csv` | 1500 | 1500 | `9fc8f81d243529d5...` | MATCH | IDENTICAL |
-| `shipments.csv` | 500 | 500 | `ea5e3e2bec387934...` | MATCH | IDENTICAL |
-| `tracking_events.csv` | 3000 | 3000 | `d5ece7f1245b07d8...` | MATCH | IDENTICAL |
-| `weather_event_facilities.csv` | 18 | 18 | `b36d2318024b9c16...` | MATCH | IDENTICAL |
-| `weather_event_legs.csv` | 128 | 128 | `eb41ec88dd190feb...` | MATCH | IDENTICAL |
-| `weather_events.csv` | 10 | 10 | `dcd9f8a9411a7148...` | MATCH | IDENTICAL |
+| `carrier_calendars.csv` | 42 | 42 | `b35425f7bdd77873...` | MATCH | IDENTICAL |
+| `carriers.csv` | 6 | 6 | `dbd66f3cb53ba3d8...` | MATCH | IDENTICAL |
+| `delay_reasons.csv` | 6 | 6 | `ce1b06477adb5900...` | MATCH | IDENTICAL |
+| `eta_estimates.csv` | 7242 | 7242 | `940668634a079b73...` | MATCH | IDENTICAL |
+| `facilities.csv` | 10 | 10 | `a40b5f4ab69a46f6...` | MATCH | IDENTICAL |
+| `facility_calendars.csv` | 70 | 70 | `aed16aab3530004d...` | MATCH | IDENTICAL |
+| `facility_queues.csv` | 300 | 300 | `bc6198bea7e339b8...` | MATCH | IDENTICAL |
+| `ground_truth.csv` | 67 | 67 | `bba840b6e90f01ca...` | MATCH | IDENTICAL |
+| `ground_truth.json` | 67 | 67 | `83cd6e98d83b984b...` | MATCH | IDENTICAL |
+| `logistics.sqlite` | 14519 | 14519 | `dc96f5699581cac0...` | MATCH | IDENTICAL |
+| `route_changes.csv` | 15 | 15 | `fdb9853925033c87...` | MATCH | IDENTICAL |
+| `route_leg_templates.csv` | 31 | 31 | `8b5ce7c1d72e32ad...` | MATCH | IDENTICAL |
+| `routes.csv` | 15 | 15 | `a9a5ce56f7016e71...` | MATCH | IDENTICAL |
+| `seed.sql` | 14519 | 14519 | `bf8db70816fcd58b...` | MATCH | IDENTICAL |
+| `service_levels.csv` | 4 | 4 | `9db727f3f5e84980...` | MATCH | IDENTICAL |
+| `shipment_delay_reasons.csv` | 596 | 596 | `35073a170bf502b1...` | MATCH | IDENTICAL |
+| `shipment_legs.csv` | 1009 | 1009 | `c6cf82c52e7fcddc...` | MATCH | IDENTICAL |
+| `shipment_status_history.csv` | 1500 | 1500 | `ce83dfcd68e98fa8...` | MATCH | IDENTICAL |
+| `shipments.csv` | 500 | 500 | `d9669f626563980a...` | MATCH | IDENTICAL |
+| `tracking_events.csv` | 3000 | 3000 | `811799c047903a0c...` | MATCH | IDENTICAL |
+| `weather_event_facilities.csv` | 18 | 18 | `8c826c0bdd8cd20c...` | MATCH | IDENTICAL |
+| `weather_event_legs.csv` | 145 | 145 | `ca9bc2af26c2ab53...` | MATCH | IDENTICAL |
+| `weather_events.csv` | 10 | 10 | `5f0345c2fe519d84...` | MATCH | IDENTICAL |
 
 ---
 

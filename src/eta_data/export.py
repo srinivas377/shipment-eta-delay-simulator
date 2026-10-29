@@ -10,7 +10,7 @@ import hashlib
 import json
 import shutil
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -268,7 +268,7 @@ def export_dataset(
         fieldnames = list(sorted_rows[0].keys())
 
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator="\n")
             writer.writeheader()
             for r in sorted_rows:
                 # Format booleans cleanly as 1/0 or True/False
@@ -301,11 +301,11 @@ def export_dataset(
     if gt_sorted:
         gt_fields = list(gt_sorted[0].keys())
         with open(gt_csv_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=gt_fields)
+            writer = csv.DictWriter(f, fieldnames=gt_fields, lineterminator="\n")
             writer.writeheader()
             writer.writerows(gt_sorted)
 
-        with open(gt_json_path, "w", encoding="utf-8") as f:
+        with open(gt_json_path, "w", newline="\n", encoding="utf-8") as f:
             json.dump(gt_sorted, f, indent=2)
 
         # Write dataset-specific copies to prevent cross-scale overwrite collisions
@@ -331,7 +331,7 @@ def export_dataset(
     sql_path = out_dir / "seed.sql"
     sqlite_path = out_dir / "logistics.sqlite"
 
-    with open(sql_path, "w", encoding="utf-8") as f:
+    with open(sql_path, "w", newline="\n", encoding="utf-8") as f:
         f.write(SQL_SCHEMA_DDL)
         f.write("\nBEGIN TRANSACTION;\n")
 
@@ -388,7 +388,7 @@ def export_dataset(
         "generator_version": metadata.get("version", "1.0.0"),
         "master_seed": metadata.get("seed", 20261022),
         "scale": metadata.get("scale", 1.0),
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "generation_command": metadata.get("command", ""),
         "total_files": len(manifest_files),
         "files": manifest_files,

@@ -75,8 +75,7 @@ class SimulationEngine:
             return 1.0, 0.0
 
         est_arrive_dt = depart_dt + timedelta(hours=planned_hours)
-        compound_mult = 1.0
-        weather_delay = 0.0
+        max_mult = 1.0
 
         for d, d_start, d_end in regional_disruptions:
             if d["window_type"] != "WEATHER":
@@ -88,11 +87,13 @@ class SimulationEngine:
                 overlap_hours = (overlap_end - overlap_start).total_seconds() / 3600.0
                 mult = float(d["speed_multiplier"])
                 weight = min(1.0, overlap_hours / max(1.0, planned_hours))
-                added = (mult - 1.0) * weight
-                compound_mult += added
-                weather_delay += planned_hours * added
+                eff = 1.0 + (mult - 1.0) * weight
+                if eff > max_mult:
+                    max_mult = eff
 
-        return max(1.0, round(compound_mult, 3)), max(0.0, round(weather_delay, 2))
+        clamped_mult = min(1.28, max_mult)
+        weather_delay = planned_hours * (clamped_mult - 1.0)
+        return max(1.0, round(clamped_mult, 3)), max(0.0, round(weather_delay, 2))
 
     def simulate(
         self,
@@ -112,11 +113,15 @@ class SimulationEngine:
             orig_fac = self.facilities[shp["origin_facility_id"]]
 
             # Pickup scheduling: respect origin opening hours and supplier prep delay
-            if self.rng_transit.random() < 0.22:
-                # 22% of shipments experience supplier dispatch staging delay
-                dispatch_prep = float(self.rng_transit.uniform(3.0, 12.0))
+            roll = self.rng_transit.random()
+            if roll < 0.12:
+                # 12% experience mild supplier staging / paperwork delay (3.0 - 5.0h)
+                dispatch_prep = float(self.rng_transit.uniform(3.0, 5.0))
+            elif roll < 0.16:
+                # 4% experience moderate supplier staging delay (6.0 - 9.0h)
+                dispatch_prep = float(self.rng_transit.uniform(6.0, 9.0))
             else:
-                dispatch_prep = float(self.rng_transit.uniform(0.5, 2.5))
+                dispatch_prep = float(self.rng_transit.uniform(0.5, 2.0))
             earliest_pickup = created_dt + timedelta(hours=dispatch_prep)
             actual_pickup = get_next_open_time(orig_fac["type"], earliest_pickup)
 
@@ -185,7 +190,11 @@ class SimulationEngine:
                         rtc_seq += 1
 
                 # Actual transit calculation
-                actual_duration = max(0.2, planned_duration * carrier_noise * weather_mult)
+                leg_extra = 0.0
+                if self.rng_transit.random() < 0.04:
+                    leg_extra = float(self.rng_transit.uniform(1.0, 2.5))
+
+                actual_duration = max(0.2, (planned_duration * carrier_noise + leg_extra) * weather_mult)
                 actual_arr = current_depart_dt + timedelta(hours=actual_duration)
 
                 leg_row = {
@@ -207,7 +216,8 @@ class SimulationEngine:
                 # Advance to next leg: intermediate facility queue and calendar
                 if leg_idx < len(route_templates) - 1:
                     base_dwell = float(to_fac.get("dwell_hours", 1.5))
-                    queue_factor = float(self.rng_transit.uniform(0.2, 1.8))
+                    q_roll = self.rng_transit.random()
+                    queue_factor = float(self.rng_transit.uniform(1.5, 2.2)) if q_roll < 0.06 else float(self.rng_transit.uniform(0.5, 1.2))
                     facility_wait = base_dwell * queue_factor
 
                     earliest_next_dep = actual_arr + timedelta(hours=facility_wait)

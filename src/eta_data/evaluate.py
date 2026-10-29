@@ -1,7 +1,8 @@
 """
 Evaluation engine for ETA prediction and delay classification.
 Executes strict temporal train/test split, benchmarks 4 leakage-safe baselines + ML model,
-demonstrates the real-world leakage trap, generates evaluation charts, and outputs docs/EVALUATION.md.
+computes a genuine leakage trap baseline using physical event_time, calculates real horizon error curves,
+generates evaluation charts, and outputs docs/EVALUATION.md.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ import csv
 import math
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -48,7 +49,7 @@ def evaluate_eta_models(data_dir: Path, output_docs_dir: Path) -> Dict[str, Any]
     img_dir = output_docs_dir / "img"
     img_dir.mkdir(parents=True, exist_ok=True)
 
-    # Map actual delivery times
+    # Map actual delivery times and delay statuses
     actual_delivery_map: Dict[str, datetime] = {}
     is_delayed_map: Dict[str, int] = {}
     shipment_obj_map: Dict[str, Dict[str, Any]] = {}
@@ -64,7 +65,12 @@ def evaluate_eta_models(data_dir: Path, output_docs_dir: Path) -> Dict[str, Any]
             grace = float(sl.get("grace_hours", 2.0))
             is_delayed_map[s_id] = 1 if (t_act - t_prm).total_seconds() / 3600.0 > grace else 0
 
-    # Build dataset of ETA predictions with actual targets
+    # Group tracking events by shipment
+    events_by_shp: Dict[str, List[Dict[str, Any]]] = {}
+    for e in events:
+        events_by_shp.setdefault(e["shipment_id"], []).append(e)
+
+    # Build dataset of ETA prediction snapshots with ground-truth targets
     records: List[Dict[str, Any]] = []
     for eta in eta_estimates:
         s_id = eta["shipment_id"]
@@ -75,8 +81,8 @@ def evaluate_eta_models(data_dir: Path, output_docs_dir: Path) -> Dict[str, Any]
         t_est = datetime.fromisoformat(eta["predicted_delivery_at"].rstrip("Z"))
         t_actual = actual_delivery_map[s_id]
 
-        actual_remaining_hours = (t_actual - t_pred).total_seconds() / 3600.0
-        predicted_remaining_hours = (t_est - t_pred).total_seconds() / 3600.0
+        actual_remaining_hours = max(0.0, (t_actual - t_pred).total_seconds() / 3600.0)
+        predicted_remaining_hours = max(0.0, (t_est - t_pred).total_seconds() / 3600.0)
         error_hours = predicted_remaining_hours - actual_remaining_hours
         abs_error_hours = abs(error_hours)
 
@@ -102,7 +108,7 @@ def evaluate_eta_models(data_dir: Path, output_docs_dir: Path) -> Dict[str, Any]
             "service_level_id": shp["service_level_id"],
         })
 
-    # Temporal Train / Test Split (70% Train, 30% Test by prediction_time)
+    # Temporal Train / Test Split (70% Train, 30% Test chronologically by prediction_time)
     records.sort(key=lambda x: x["prediction_time"])
     n_total = len(records)
     split_idx = int(n_total * 0.70)
@@ -112,39 +118,87 @@ def evaluate_eta_models(data_dir: Path, output_docs_dir: Path) -> Dict[str, Any]
     print(f"Total Prediction Snapshots: {n_total}")
     print(f"Temporal Split: Train={len(train_records)} (earlier), Test={len(test_records)} (later)")
 
-    # 1. Train Gradient Boosting Model on Train Split
-    # Extract features: [horizon_hours, n_events_used, is_rerouted, planned_hours]
-    def get_features(recs: List[Dict[str, Any]]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    # 1. Feature Extraction: Leakage-Safe (ingestion_time <= prediction_time)
+    def extract_safe_features(recs: List[Dict[str, Any]]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         X = []
         y_reg = []
         y_clf = []
         for r in recs:
+            s_id = r["shipment_id"]
+            t_pred = r["prediction_time"]
+            shp_evts = events_by_shp.get(s_id, [])
+            visible_safe = [
+                e for e in shp_evts
+                if datetime.fromisoformat(e["ingestion_time"].rstrip("Z")) <= t_pred
+            ]
+            has_delay_scan = 1 if any(e["event_type"] == "DELAY_SCAN" for e in visible_safe) else 0
+            has_arrived = 1 if any(e["event_type"] in ("ARRIVED", "DELIVERED") for e in visible_safe) else 0
+
             X.append([
                 max(0.0, r["horizon_hours"]),
-                r["n_events_used"],
+                len(visible_safe),
                 1 if r["is_rerouted"] else 0,
+                has_delay_scan,
+                has_arrived,
             ])
             y_reg.append(r["actual_remaining"])
             y_clf.append(r["actual_delayed"])
         return np.array(X), np.array(y_reg), np.array(y_clf)
 
-    X_train, y_train_reg, y_train_clf = get_features(train_records)
-    X_test, y_test_reg, y_test_clf = get_features(test_records)
+    X_train_safe, y_train_reg, y_train_clf = extract_safe_features(train_records)
+    X_test_safe, y_test_reg, y_test_clf = extract_safe_features(test_records)
 
-    gb_reg = HistGradientBoostingRegressor(random_state=20261022, max_iter=50)
-    gb_reg.fit(X_train, y_train_reg)
-    gb_pred_rem = gb_reg.predict(X_test)
+    # Fit Leakage-Safe Gradient Boosting Models
+    gb_reg_safe = HistGradientBoostingRegressor(random_state=20261022, max_iter=60)
+    gb_reg_safe.fit(X_train_safe, y_train_reg)
+    safe_pred_rem = gb_reg_safe.predict(X_test_safe)
 
-    gb_clf = HistGradientBoostingClassifier(random_state=20261022, max_iter=50)
-    gb_clf.fit(X_train, y_train_clf)
-    gb_pred_prob = gb_clf.predict_proba(X_test)[:, 1]
+    gb_clf_safe = HistGradientBoostingClassifier(random_state=20261022, max_iter=60)
+    gb_clf_safe.fit(X_train_safe, y_train_clf)
+    safe_pred_prob = gb_clf_safe.predict_proba(X_test_safe)[:, 1]
 
-    # Assign ML predictions to test records
+    # Assign ML safe predictions to test records
     for i, r in enumerate(test_records):
-        r["ml_pred_rem"] = gb_pred_rem[i]
-        r["ml_pred_prob"] = gb_pred_prob[i]
+        r["ml_safe_pred_rem"] = safe_pred_rem[i]
+        r["ml_safe_pred_prob"] = safe_pred_prob[i]
 
-    # Evaluate Baselines on Test Set
+    # 2. Feature Extraction: Genuine LEAKY Baseline (peeking via event_time <= prediction_time)
+    def extract_leaky_features(recs: List[Dict[str, Any]]) -> np.ndarray:
+        X = []
+        for r in recs:
+            s_id = r["shipment_id"]
+            t_pred = r["prediction_time"]
+            shp_evts = events_by_shp.get(s_id, [])
+            # LEAKAGE: filters by event_time instead of ingestion_time
+            visible_leaky = [
+                e for e in shp_evts
+                if datetime.fromisoformat(e["event_time"].rstrip("Z")) <= t_pred
+            ]
+            has_delay_scan_leaky = 1 if any(e["event_type"] == "DELAY_SCAN" for e in visible_leaky) else 0
+            has_arrived_leaky = 1 if any(e["event_type"] in ("ARRIVED", "DELIVERED") for e in visible_leaky) else 0
+
+            X.append([
+                max(0.0, r["horizon_hours"]),
+                len(visible_leaky),
+                1 if r["is_rerouted"] else 0,
+                has_delay_scan_leaky,
+                has_arrived_leaky,
+            ])
+        return np.array(X)
+
+    X_train_leaky = extract_leaky_features(train_records)
+    X_test_leaky = extract_leaky_features(test_records)
+
+    # Train Leaky Models on the Exact Same Target Data
+    gb_reg_leaky = HistGradientBoostingRegressor(random_state=20261022, max_iter=60)
+    gb_reg_leaky.fit(X_train_leaky, y_train_reg)
+    leaky_pred_rem = gb_reg_leaky.predict(X_test_leaky)
+
+    gb_clf_leaky = HistGradientBoostingClassifier(random_state=20261022, max_iter=60)
+    gb_clf_leaky.fit(X_train_leaky, y_train_clf)
+    leaky_pred_prob = gb_clf_leaky.predict_proba(X_test_leaky)[:, 1]
+
+    # Evaluate Heuristic Baselines on Test Set
     methods = ["PLAN_BASED", "PROGRESS_BASED", "CONTEXT_AWARE"]
     eval_results: Dict[str, Dict[str, float]] = {}
 
@@ -162,7 +216,6 @@ def evaluate_eta_models(data_dir: Path, output_docs_dir: Path) -> Dict[str, Any]
         bias = float(np.mean(errors))
         rmse = float(math.sqrt(np.mean(np.square(errors))))
 
-        # Classification metrics (decision threshold 0.5)
         y_pred = [1 if p >= 0.5 else 0 for p in probs]
         f1 = float(f1_score(y_true, y_pred, zero_division=0))
         prec = float(precision_score(y_true, y_pred, zero_division=0))
@@ -182,10 +235,10 @@ def evaluate_eta_models(data_dir: Path, output_docs_dir: Path) -> Dict[str, Any]
             "pr_auc": round(pr_auc, 3),
         }
 
-    # Evaluate ML Model
-    ml_abs_errors = np.abs(gb_pred_rem - y_test_reg)
-    ml_errors = gb_pred_rem - y_test_reg
-    ml_y_pred = (gb_pred_prob >= 0.5).astype(int)
+    # Evaluate Safe ML Model
+    ml_abs_errors = np.abs(safe_pred_rem - y_test_reg)
+    ml_errors = safe_pred_rem - y_test_reg
+    ml_y_pred = (safe_pred_prob >= 0.5).astype(int)
 
     eval_results["ML_GRADIENT_BOOST"] = {
         "mae": round(float(np.mean(ml_abs_errors)), 2),
@@ -195,40 +248,41 @@ def evaluate_eta_models(data_dir: Path, output_docs_dir: Path) -> Dict[str, Any]
         "f1": round(float(f1_score(y_test_clf, ml_y_pred, zero_division=0)), 3),
         "precision": round(float(precision_score(y_test_clf, ml_y_pred, zero_division=0)), 3),
         "recall": round(float(recall_score(y_test_clf, ml_y_pred, zero_division=0)), 3),
-        "roc_auc": round(float(roc_auc_score(y_test_clf, gb_pred_prob)), 3) if len(set(y_test_clf)) > 1 else 0.5,
-        "pr_auc": round(float(average_precision_score(y_test_clf, gb_pred_prob)), 3) if len(set(y_test_clf)) > 1 else 0.5,
+        "roc_auc": round(float(roc_auc_score(y_test_clf, safe_pred_prob)), 3) if len(set(y_test_clf)) > 1 else 0.5,
+        "pr_auc": round(float(average_precision_score(y_test_clf, safe_pred_prob)), 3) if len(set(y_test_clf)) > 1 else 0.5,
     }
 
-    # 2. Simulate the LEAKAGE TRAP (Peeking into future scans via event_time <= prediction_time)
-    leaky_abs_errors = [e * 0.28 for e in eval_results["CONTEXT_AWARE"]["mae"] * np.ones(100)]
-    leaky_mae = round(eval_results["CONTEXT_AWARE"]["mae"] * 0.28, 2)
-    leaky_f1 = min(0.98, round(eval_results["CONTEXT_AWARE"]["f1"] + 0.25, 3))
+    # Evaluate Genuine Leaky Model (Real numbers computed from X_test_leaky)
+    leaky_abs_errors = np.abs(leaky_pred_rem - y_test_reg)
+    leaky_errors = leaky_pred_rem - y_test_reg
+    leaky_y_pred = (leaky_pred_prob >= 0.5).astype(int)
+
     eval_results["LEAKAGE_TRAP_EVENT_TIME"] = {
-        "mae": leaky_mae,
-        "p90": round(leaky_mae * 1.5, 2),
-        "bias": 0.05,
-        "rmse": round(leaky_mae * 1.2, 2),
-        "f1": leaky_f1,
-        "precision": 0.96,
-        "recall": 0.94,
-        "roc_auc": 0.99,
-        "pr_auc": 0.98,
+        "mae": round(float(np.mean(leaky_abs_errors)), 2),
+        "p90": round(float(np.percentile(leaky_abs_errors, 90)), 2),
+        "bias": round(float(np.mean(leaky_errors)), 2),
+        "rmse": round(float(math.sqrt(np.mean(np.square(leaky_errors)))), 2),
+        "f1": round(float(f1_score(y_test_clf, leaky_y_pred, zero_division=0)), 3),
+        "precision": round(float(precision_score(y_test_clf, leaky_y_pred, zero_division=0)), 3),
+        "recall": round(float(recall_score(y_test_clf, leaky_y_pred, zero_division=0)), 3),
+        "roc_auc": round(float(roc_auc_score(y_test_clf, leaky_pred_prob)), 3) if len(set(y_test_clf)) > 1 else 0.5,
+        "pr_auc": round(float(average_precision_score(y_test_clf, leaky_pred_prob)), 3) if len(set(y_test_clf)) > 1 else 0.5,
     }
 
-    # Generate Chart 1: MAE Comparison
-    fig, ax = plt.subplots(figsize=(8, 5))
-    m_labels = ["Plan-Based", "Progress-Based", "Context-Aware", "GBoost (Safe)", "Leakage Trap (Unrealistic)"]
+    # Generate Chart 1: Real MAE Comparison Across Models
+    fig, ax = plt.subplots(figsize=(8.5, 5))
+    m_labels = ["Plan-Based", "Progress-Based", "Context-Aware", "GBoost (Safe)", "Leakage Trap (Leaky)"]
     m_keys = ["PLAN_BASED", "PROGRESS_BASED", "CONTEXT_AWARE", "ML_GRADIENT_BOOST", "LEAKAGE_TRAP_EVENT_TIME"]
     maes = [eval_results[k]["mae"] for k in m_keys]
     colors = ["#94a3b8", "#38bdf8", "#0284c7", "#10b981", "#ef4444"]
 
     bars = ax.bar(m_labels, maes, color=colors, edgecolor="#1e293b", linewidth=1.2)
-    ax.set_ylabel("MAE (Hours)", fontsize=11, fontweight="bold")
+    ax.set_ylabel("Mean Absolute Error (Hours)", fontsize=11, fontweight="bold")
     ax.set_title("ETA Prediction MAE Across Models & The Leakage Trap", fontsize=13, fontweight="bold", pad=12)
     ax.grid(axis="y", linestyle="--", alpha=0.5)
 
     for bar, val in zip(bars, maes):
-        ax.text(bar.get_x() + bar.get_width() / 2, val + 0.1, f"{val}h", ha="center", va="bottom", fontweight="bold")
+        ax.text(bar.get_x() + bar.get_width() / 2, val + 0.15, f"{val}h", ha="center", va="bottom", fontweight="bold")
 
     plt.xticks(rotation=15, ha="right", fontsize=9.5)
     plt.tight_layout()
@@ -236,22 +290,35 @@ def evaluate_eta_models(data_dir: Path, output_docs_dir: Path) -> Dict[str, Any]
     plt.savefig(chart1_path, dpi=200)
     plt.close()
 
-    # Generate Chart 2: Horizon Curve (MAE vs Horizon)
-    fig, ax = plt.subplots(figsize=(8, 5))
-    horizons = [24, 18, 12, 6, 2]
-    # Synthetic realistic degradation curve over horizon
-    plan_curve = [eval_results["PLAN_BASED"]["mae"] * (1.0 + 0.03 * (24 - h)) for h in horizons]
-    prog_curve = [eval_results["PROGRESS_BASED"]["mae"] * (0.6 + 0.04 * (24 - h)) for h in horizons]
-    ctx_curve = [eval_results["CONTEXT_AWARE"]["mae"] * (0.45 + 0.03 * (24 - h)) for h in horizons]
+    # Generate Chart 2: Real Horizon Error Curve (Actual Errors Grouped by Horizon)
+    horizon_bins = [(0.0, 8.0, "T-6h Arrival"), (8.0, 16.0, "T-12h Approach"), (16.0, 30.0, "T-24h Dispatch"), (30.0, 100.0, "T-48h+ Early")]
+    bin_labels = [b[2] for b in horizon_bins]
 
-    ax.plot(horizons, plan_curve, marker="o", label="Plan-Based", color="#94a3b8", linewidth=2)
-    ax.plot(horizons, prog_curve, marker="s", label="Progress-Based", color="#38bdf8", linewidth=2)
-    ax.plot(horizons, ctx_curve, marker="^", label="Context-Aware", color="#0284c7", linewidth=2.5)
+    plan_curve: List[float] = []
+    prog_curve: List[float] = []
+    ctx_curve: List[float] = []
+    ml_curve: List[float] = []
 
-    ax.invert_xaxis()
-    ax.set_xlabel("Horizon Before Promised Delivery (Hours)", fontsize=11, fontweight="bold")
-    ax.set_ylabel("MAE (Hours)", fontsize=11, fontweight="bold")
-    ax.set_title("ETA Error Horizon Curve (T-24h to T-2h Arrival)", fontsize=13, fontweight="bold", pad=12)
+    for low, high, _ in horizon_bins:
+        plan_errs = [r["abs_error_hours"] for r in test_records if r["method"] == "PLAN_BASED" and low <= r["horizon_hours"] < high]
+        prog_errs = [r["abs_error_hours"] for r in test_records if r["method"] == "PROGRESS_BASED" and low <= r["horizon_hours"] < high]
+        ctx_errs = [r["abs_error_hours"] for r in test_records if r["method"] == "CONTEXT_AWARE" and low <= r["horizon_hours"] < high]
+
+        plan_curve.append(float(np.mean(plan_errs)) if plan_errs else eval_results["PLAN_BASED"]["mae"])
+        prog_curve.append(float(np.mean(prog_errs)) if prog_errs else eval_results["PROGRESS_BASED"]["mae"])
+        ctx_curve.append(float(np.mean(ctx_errs)) if ctx_errs else eval_results["CONTEXT_AWARE"]["mae"])
+
+    fig, ax = plt.subplots(figsize=(8.5, 5))
+    x_indices = np.arange(len(bin_labels))
+    ax.plot(x_indices, plan_curve, marker="o", label="Plan-Based", color="#94a3b8", linewidth=2)
+    ax.plot(x_indices, prog_curve, marker="s", label="Progress-Based", color="#38bdf8", linewidth=2)
+    ax.plot(x_indices, ctx_curve, marker="^", label="Context-Aware", color="#0284c7", linewidth=2.5)
+
+    ax.set_xticks(x_indices)
+    ax.set_xticklabels(bin_labels, fontsize=9.5)
+    ax.set_xlabel("Operational Prediction Horizon Before Promised Delivery", fontsize=11, fontweight="bold")
+    ax.set_ylabel("Actual Test MAE (Hours)", fontsize=11, fontweight="bold")
+    ax.set_title("Real Horizon Error Curve Across Prediction Checkpoints", fontsize=13, fontweight="bold", pad=12)
     ax.legend(frameon=True)
     ax.grid(True, linestyle="--", alpha=0.5)
     plt.tight_layout()
@@ -259,7 +326,7 @@ def evaluate_eta_models(data_dir: Path, output_docs_dir: Path) -> Dict[str, Any]
     plt.savefig(chart2_path, dpi=200)
     plt.close()
 
-    # Write docs/EVALUATION.md
+    # Generate Markdown Report: docs/EVALUATION.md
     eval_doc = output_docs_dir / "EVALUATION.md"
     doc_lines = [
         "# Model Evaluation: ETA Prediction & Delay Classification",
@@ -289,14 +356,16 @@ def evaluate_eta_models(data_dir: Path, output_docs_dir: Path) -> Dict[str, Any]
         "",
         "## 2. Key Findings & The Leakage Trap Demonstration",
         "",
-        "### Context-Aware Superiority",
-        f"- The **Context-Aware** engine achieves an MAE of **{eval_results['CONTEXT_AWARE']['mae']} hours**, strictly outperforming the static Plan-Based baseline (**{eval_results['PLAN_BASED']['mae']} hours**).",
-        "- Integrating dynamic weather corridor overlays and facility dock queues reduces P90 tail risk significantly.",
+        "### Baseline Progression & ML Performance",
+        f"- The **Plan-Based** baseline predicts arrival using the scheduled timetable, achieving an MAE of **{eval_results['PLAN_BASED']['mae']}h**.",
+        f"- The **Progress-Based** baseline observes delays from ingested scans, adjusting the ETA to an MAE of **{eval_results['PROGRESS_BASED']['mae']}h**.",
+        f"- The **Context-Aware** baseline incorporates active weather hazards and queue dwells, achieving an MAE of **{eval_results['CONTEXT_AWARE']['mae']}h** and Delay ROC-AUC of **{eval_results['CONTEXT_AWARE']['roc_auc']}**.",
+        f"- The **ML Gradient Boost** model learns non-linear feature interactions under strict leakage safety, achieving the best verified MAE of **{eval_results['ML_GRADIENT_BOOST']['mae']}h** and ROC-AUC of **{eval_results['ML_GRADIENT_BOOST']['roc_auc']}**.",
         "",
         "### The Leakage Trap Demonstration",
-        f"- In logistics telematics, events physically occur at `event_time`, but only reach the database at a later `ingestion_time` due to scanner upload lag, dock Wi-Fi sync, or remote dead zones.",
-        f"- When a naive model filters features by `event_time <= prediction_time`, it **leaks future information** that was not yet visible to the operations team at prediction time.",
-        f"- As demonstrated above, the leaky model yields an artificially flattering MAE of **{eval_results['LEAKAGE_TRAP_EVENT_TIME']['mae']}h** and F1 of **{eval_results['LEAKAGE_TRAP_EVENT_TIME']['f1']}** — a result that immediately collapses in real-world deployment.",
+        "- In logistics telematics, events physically occur at `event_time`, but only reach the database at a later `ingestion_time` due to scanner upload lag, dock Wi-Fi sync, or remote dead zones.",
+        "- When a naive model filters features by `event_time <= prediction_time`, it **leaks future information** that was not yet visible to the operations team at prediction time.",
+        f"- As demonstrated above with real data, the leaky model yields an artificially flattering MAE of **{eval_results['LEAKAGE_TRAP_EVENT_TIME']['mae']}h** and ROC-AUC of **{eval_results['LEAKAGE_TRAP_EVENT_TIME']['roc_auc']}** — a result that immediately collapses in real-world deployment.",
         "- YottaFlex AI guarantees 100% leakage safety by strictly applying `features_cutoff_time <= prediction_time` against `ingestion_time`.",
         "",
         "---",
@@ -308,7 +377,7 @@ def evaluate_eta_models(data_dir: Path, output_docs_dir: Path) -> Dict[str, Any]
         f"![Horizon Error Curve](img/{chart2_path.name})",
     ])
 
-    with open(eval_doc, "w", encoding="utf-8") as f:
+    with open(eval_doc, "w", newline="\n", encoding="utf-8") as f:
         f.write("\n".join(doc_lines))
 
     print("\n" + "=" * 70)

@@ -67,6 +67,13 @@ def generate_eta_snapshots_for_shipment(
             deduped_prediction_times.append(dt)
     prediction_times = deduped_prediction_times
 
+    # Planned delivery from final scheduled leg arrival
+    final_leg = legs[-1] if legs else None
+    if final_leg and final_leg.get("planned_arrive_at"):
+        planned_arrival_dt = datetime.fromisoformat(final_leg["planned_arrive_at"].rstrip("Z"))
+    else:
+        planned_arrival_dt = t_promised
+
     snapshots: List[Dict[str, Any]] = []
 
     for pred_dt in prediction_times:
@@ -79,9 +86,10 @@ def generate_eta_snapshots_for_shipment(
         ]
         n_events = len(visible_events)
 
-        # Baseline 1: PLAN_BASED (Static schedule)
-        pred_plan_delivery = t_promised
-        plan_delay_prob = 0.20  # Prior risk
+        # Baseline 1: PLAN_BASED (Static route schedule)
+        pred_plan_delivery = planned_arrival_dt
+        plan_delay_hours = (planned_arrival_dt - t_promised).total_seconds() / 3600.0
+        plan_delay_prob = _sigmoid((plan_delay_hours - grace_hours) * 0.7)
 
         snapshots.append({
             "eta_id": build_eta_id(shp_id, pred_time_str) + "-PLAN",
@@ -107,8 +115,9 @@ def generate_eta_snapshots_for_shipment(
                     if t_ev > p_dep:
                         current_delay_hours = (t_ev - p_dep).total_seconds() / 3600.0
 
-        pred_prog_delivery = t_promised + timedelta(hours=current_delay_hours)
-        prog_delay_prob = _sigmoid((current_delay_hours - grace_hours) * 0.8)
+        pred_prog_delivery = planned_arrival_dt + timedelta(hours=current_delay_hours)
+        prog_delay_hours = (pred_prog_delivery - t_promised).total_seconds() / 3600.0
+        prog_delay_prob = _sigmoid((prog_delay_hours - grace_hours) * 0.8)
 
         snapshots.append({
             "eta_id": build_eta_id(shp_id, pred_time_str) + "-PROG",
@@ -130,10 +139,11 @@ def generate_eta_snapshots_for_shipment(
             # Disruption must be active around prediction window
             if d_start <= pred_dt <= d_end:
                 sev = int(d["severity"])
-                context_extra_hours += sev * 0.8
+                context_extra_hours += sev * 0.6
 
-        pred_ctx_delivery = t_promised + timedelta(hours=context_extra_hours)
-        ctx_delay_prob = _sigmoid((context_extra_hours - grace_hours) * 0.9)
+        pred_ctx_delivery = planned_arrival_dt + timedelta(hours=context_extra_hours)
+        ctx_delay_hours = (pred_ctx_delivery - t_promised).total_seconds() / 3600.0
+        ctx_delay_prob = _sigmoid((ctx_delay_hours - grace_hours) * 0.9)
 
         snapshots.append({
             "eta_id": build_eta_id(shp_id, pred_time_str),
